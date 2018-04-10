@@ -4,86 +4,78 @@ import java.util.ArrayList;
 import java.util.List;
 
 import boardgame.Move;
-import coordinates.Coord;
 import tablut.TablutBoardState;
 import tablut.TablutMove;
 import tablut.TablutPlayer;
 
-/** A player file submitted by a student. */
+/** Player file submitted by Ivelin Bratanov (260535395) */
 public class StudentPlayer extends TablutPlayer {
-
+	
     /**
-     * You must modify this constructor to return your student number. This is
-     * important, because this is what the code that runs the competition uses to
-     * associate you with your agent. The constructor should do nothing else.
+     * Constructor for StudentPlayer class
      */
     public StudentPlayer() {
         super("260535395");
     }
 
     /**
-     * This is the primary method that you need to implement. The ``boardState``
-     * object contains the current state of the game, which your agent must use to
-     * make decisions.
+     * Selects a move using Minimax tree search and returns the best move found
      */
     public Move chooseMove(TablutBoardState boardState) {
-        // You probably will make separate functions in MyTools.
-        // For example, maybe you'll need to load some pre-processed best opening
-        // strategies...
-//        MyTools.getSomething();
-
-        // Get the legal moves for the current board state.        
-        List<TablutMove> moves = boardState.getAllLegalMoves();
-        
-        return minimaxDecision(moves, boardState);
+        // Pass all legal moves for the current board state to Minimax algorithm.                
+        return minimaxDecision(boardState.getAllLegalMoves(), boardState);
     }
     
     /**
      * This is the core method for selecting which move to play.
      * It follows the pseudo-code for minimaxDecision shown in the class slides.
      * 
-     * It implements a sort of iterative deepening and represents the initial branching of the current node,
-     * then calling minimaxValue() to evaluate each move.
+     * It implements represents the initial branching of the current node, processing
+     * each of the available moves and then calling minimaxValue() to evaluate the value
+     * of the move by traversing the game state tree using minimax with alpha-beta pruning.
      */
     public TablutMove minimaxDecision(List<TablutMove> moves, TablutBoardState boardState) {
-    	double[] moveValue = new double [moves.size()];
-    	    	    	
-    	/*
-    	 * A sort of iterative deepening, where we increase the depth of the search as the game
-    	 * progresses, since we can presume there are less move possibilities later in games
-    	 * due to piece capture.
-    	 */
-    	int currentTurn = boardState.getTurnNumber();
-    	int maxDepth = 3;
-
-    	if (currentTurn > 25) {
-    		maxDepth = 4;
-    	} else if (currentTurn > 60) {
-    		maxDepth = 5;
-    	}
+    	// Keeps track of when the move was started in order to avoid timeouts
+    	long moveStartTime = System.currentTimeMillis();
     	
+    	// Stores the value of every possible move for the current board state.
+        double[] moveValue = new double [moves.size()];
+    	
+        // This was found to be the max depth value which causes minimal timeouts
+    	int maxDepth = 3;
+    	
+    	/*
+    	 * Iterate through all possible moves and assign a value to each of them using mimimax
+    	 * (with α - β pruning) and the evaluation function.
+    	 */
     	int curMoveIdx = 0;
     	for (TablutMove curMove: moves) {
+    		
+    		// Evaluating a move to depth 3 takes up to 60ms in most cases, thus if we reach 1940ms, return the best move found thus far
+    		if (System.currentTimeMillis() - moveStartTime > 1940) {
+    	    	return moves.get(getHighestValueMove(moveValue));
+    		}
+
     		// Clone the board state and apply the move to obtain the new game state and evaluate it using minimax
             TablutBoardState clonedBoardState = (TablutBoardState) boardState.clone();
             clonedBoardState.processMove(curMove); // apply the operator o and obtain the new game state s.
             
+            // Shortcut which exits if we find a winning move.
             if (clonedBoardState.getWinner() == player_id) {
             	return curMove;
             }
             
             // start with alpha & beta = -10K/10K and initial depth 1
             moveValue[curMoveIdx] = minimaxValue(clonedBoardState, -10000, 10000, 1, maxDepth); // Value[o] = MinimaxValue(s)
-            
             curMoveIdx++;
     	}
     	
-    	//return the operator with the highest value Value[o]
+    	//return the operator with the highest value Value[o] by finding its index in the moves list
     	return moves.get(getHighestValueMove(moveValue));
     }
     
     /**
-     * Helper method to iterate the move values array and return
+     * Helper method to iterate through the moveValue array and return
      * the index of the highest valued move. 
      */
     public int getHighestValueMove(double [] moveValue) {
@@ -99,38 +91,29 @@ public class StudentPlayer extends TablutPlayer {
     }
     
     /**
-     * Helper method to determine if a state is terminal.
-     */
-    public boolean isTerminal(TablutBoardState boardState) {
-    	return boardState.gameOver();
-    }
-    
-    /**
      * This implementation of the MiniMaxValue() method shown in class
      * is a hybrid between the pseudocode of minimax and the code for alpha beta pruning,
      * as this implementation contains alpha beta pruning.
+     * 
+     * It traverses the game state tree by generating successor states recursively and evaluating
+     * "leaf" nodes when the maximum intended depth is reached.
      */
     public double minimaxValue(TablutBoardState boardState, double alpha, double beta, int depth, int maxDepth) {
-    	if (depth == maxDepth) { // if we've reached the maximum decided depth, evaluate and return this state
-    		return evaluation(boardState);
-    	}
-    	
     	// if isTerminal(s), return Utility(s) based on board state
-    	if (isTerminal(boardState)) {
+    	if (boardState.gameOver()) {
     		int winner = boardState.getWinner();
     		if (winner == player_id) {
-    			return 5000;
-    		} else if (winner == Math.abs(player_id - 1)) {
-    			return -5000;
+    			return 50000;
+    		} else if (winner == 1 - player_id) {
+    			return -50000;
     		} else {
-    			// in the case of a draw TODO: change this
-        		return evaluation(boardState);
+    			// In the case of a draw we return 0 because we'll have reached 100 moves and all other leaves will either be win, loss, or draw
+        		return 0;
     		}
-    	} else {
-            List<TablutMove> moves = boardState.getAllLegalMoves();
-        	double [] stateValues = new double[moves.size()];
-
-    		ArrayList<TablutBoardState> successors = getSuccessors(boardState, moves);
+    	} else if (depth == maxDepth) { // If we've reached the maximum decided depth, evaluate and return this value
+    		return MyTools.evaluation(boardState, player_id);
+    	} else { // Otherwise, continue to generate and explore the search tree
+    		ArrayList<TablutBoardState> successors = getSuccessors(boardState);
         	
     		if (player_id == boardState.getTurnPlayer()) { // if Max player is to move in s, return maxs’ Value(s’).
             	for (TablutBoardState sucState: successors) { // for each state s’ in Successors(s)
@@ -158,12 +141,14 @@ public class StudentPlayer extends TablutPlayer {
     }
     
     /**
-     * Retrieves all successor states for a given board state and moveset
+     * Retrieves all successor states for a given board state by applying
+     * all legal moves to clones of the current board state.
      */
-    public ArrayList<TablutBoardState> getSuccessors(TablutBoardState boardState, List<TablutMove> moves) {
+    public ArrayList<TablutBoardState> getSuccessors(TablutBoardState boardState) {
     	ArrayList<TablutBoardState> successors = new ArrayList<TablutBoardState>();
     	
-    	for (TablutMove curMove: moves) {
+    	// Iterate through all legal moves and apply them to a clone of the board state
+    	for (TablutMove curMove: boardState.getAllLegalMoves()) {
     		TablutBoardState clonedBoardState = (TablutBoardState) boardState.clone();
     		clonedBoardState.processMove(curMove); // apply the operator o and obtain the new game state s.
     		successors.add(clonedBoardState);
@@ -173,31 +158,13 @@ public class StudentPlayer extends TablutPlayer {
     }
     
     /**
-     * Computes the evaluation function for given board state.
-     * Swedes are the maximizing player, Muscovites are the minimizing player.
-     * Need to set what you are at the beginning, and from there you'll know who is the maximizing player (you).
-     * If you are Muscovites, you do not care about mobility in the state you are evaluating
-     * If you are Swedes, you do care about mobility and factor it into the evaluation function
+     * The basic evaluation function used initially (piece difference).
+     * Kept for testing purposes.
      */
-    public double evaluation(TablutBoardState boardState) {
-        int opponent = Math.abs(player_id - 1);
-        
-//        // If the current player is a Swede, higher mobility gives a higher board state
-//        // If the current player is a Muscovite, mobility does not affect the board state
-//        int mobility = 0;
-        
-        double oppPieceValue = (double) boardState.getNumberPlayerPieces(opponent);
-        double yourPieceValue = (double) boardState.getNumberPlayerPieces(player_id);
+    public double basicEvaluation(TablutBoardState boardState) {    	
+        // Calculate the difference between the player's pieces and the opponent's pieces
+    	double pieceDifference = (double) (boardState.getNumberPlayerPieces(player_id) - boardState.getNumberPlayerPieces(player_id - 1));
 
-        if (player_id == TablutBoardState.SWEDE) {
-//        	mobility = boardState.getAllLegalMoves().size();
-        	//If you, the max player, are a Swede, you attribute a higher value to the opponent pieces
-        	oppPieceValue = oppPieceValue * 1.5;
-        } else {
-        	//If you're a Muscovite, you attribute a higher value to your pieces
-        	yourPieceValue = 1.5 * yourPieceValue;
-        }
-
-    	return yourPieceValue - oppPieceValue;// + mobility;
+		return pieceDifference;
     }
 }
